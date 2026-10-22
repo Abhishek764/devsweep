@@ -1,0 +1,4 @@
+# Patterns are matched relative to the scan root.
+# Keep generated folders from a trusted workspace out of scan results.
+legacy/**
+vendor/private-*
