@@ -1,0 +1,50 @@
+name: Bug report
+description: Report a reproducible problem with DevSweep
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        For security vulnerabilities, use the private
+        [security advisory form](https://github.com/Abhishek764/devsweep/security/advisories/new).
+        Do not post exploit details or sensitive paths in a public issue.
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the exact command and a small, safe example if possible.
+      placeholder: |
+        1. Create a project with ...
+        2. Run `devsweep scan ...`
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and version
+      placeholder: Windows 11 24H2, Ubuntu 24.04, etc.
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: Python 3.11.9
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output or logs
+      description: Remove usernames, private paths, tokens, and other sensitive data.
+      render: text
+    validations:
+      required: false

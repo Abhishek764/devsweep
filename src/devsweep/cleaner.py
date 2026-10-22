@@ -107,8 +107,14 @@ def _is_current_target(item: Target) -> bool:
 
 def _safe_target(root: Path, item: Target) -> tuple[bool, str]:
     try:
+        if not os.path.lexists(item.path):
+            return False, "target disappeared"
         if is_symlink_or_reparse(item.path):
             return False, "symlink or junction appeared after scan"
+        if is_symlink_or_reparse(item.project):
+            return False, "project root is a symlink or junction"
+        if item.project != root and not is_strict_descendant(root, item.project):
+            return False, "project root is outside the scan root"
         if not _is_current_target(item):
             return False, "target marker changed or target disappeared"
         if not is_strict_descendant(root, item.path):
@@ -167,6 +173,26 @@ def clean(
                 result.skipped.append(CleanFailure(item.path, reason))
             continue
         before = path_size(item.path)
+        try:
+            identity = item.path.lstat()
+        except OSError:
+            result.skipped.append(CleanFailure(item.path, "already gone, skipped"))
+            continue
+        safe, reason = _safe_target(scan_root, item)
+        try:
+            current_identity = item.path.lstat() if safe else None
+        except OSError:
+            current_identity = None
+            safe, reason = False, "target disappeared"
+        if safe and (
+            current_identity is None
+            or (identity.st_dev, identity.st_ino, identity.st_mode)
+            != (current_identity.st_dev, current_identity.st_ino, current_identity.st_mode)
+        ):
+            safe, reason = False, "target changed after validation"
+        if not safe:
+            result.skipped.append(CleanFailure(item.path, "already gone, skipped" if "disappeared" in reason else reason))
+            continue
         try:
             shutil.rmtree(to_extended_path(item.path), onerror=_read_only_retry)
         except KeyboardInterrupt:

@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from conftest import try_create_symlink
 
 from devsweep.cleaner import CleanSafetyError, _read_only_retry, clean, parse_selection
 from devsweep.scanner import Target, scan
@@ -80,7 +81,8 @@ def test_clean_skips_changed_or_outside_target(tmp_path: Path) -> None:
     outside.mkdir()
     replacement = target.path
     replacement.rename(tmp_path / "old-node-modules")
-    replacement.symlink_to(outside, target_is_directory=True)
+    if not try_create_symlink(replacement, outside, target_is_directory=True):
+        pytest.skip("symlink creation is unavailable for this user or filesystem")
     clean_result = clean(tmp_path, [target], yes=True)
     assert clean_result.deleted == []
     assert clean_result.skipped
@@ -123,6 +125,22 @@ def test_clean_accepts_explicit_index_iterable_and_reports_outside(tmp_path: Pat
     result = clean(tmp_path, [item, outside], selection=[1])
     assert result.skipped and "outside" in result.skipped[0].reason
     assert item in result.planned
+
+
+def test_clean_rejects_target_authorized_by_external_project_marker(tmp_path: Path) -> None:
+    target = setup_target(tmp_path)
+    item = scan(tmp_path, older_than=1).items[0]
+    external_project = tmp_path.parent / "external-project"
+    external_project.mkdir()
+    (external_project / "package.json").write_text("{}", encoding="utf-8")
+    forged = Target(item.type, item.path, external_project, item.project_name, item.size, item.activity)
+
+    result = clean(tmp_path, [forged], yes=True)
+
+    assert result.deleted == []
+    assert result.skipped
+    assert "project root is outside" in result.skipped[0].reason
+    assert target.exists()
 
 
 def test_read_only_retry_is_conservative_on_linux() -> None:

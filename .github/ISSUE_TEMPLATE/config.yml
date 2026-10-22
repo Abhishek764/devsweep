@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/Abhishek764/devsweep/security/advisories/new
+    about: Do not publish exploit details, sensitive paths, or credentials in a public issue.
