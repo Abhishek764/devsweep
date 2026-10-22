@@ -120,6 +120,7 @@ If GitHub CLI is installed and authenticated, the browser repository-creation st
 
 ```bash
 gh auth login
+gh repo create <YOUR_GITHUB_USERNAME>/devsweep --public --source=. --remote=origin --push
 ```
 
 Check the result with:
@@ -136,6 +137,7 @@ Inspect the current remote and update it if necessary:
 
 ```bash
 git remote -v
+git remote set-url origin https://github.com/<YOUR_GITHUB_USERNAME>/devsweep.git
 ```
 
 ### `rejected because the remote contains work`
@@ -150,6 +152,7 @@ For HTTPS, use a personal access token when Git asks for a password. Alternative
 
 ```bash
 git remote set-url origin git@github.com:<YOUR_GITHUB_USERNAME>/devsweep.git
+git push -u origin main
 ```
 
 ### The repository should not be public yet
