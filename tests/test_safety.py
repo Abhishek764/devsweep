@@ -50,12 +50,11 @@ def test_windows_attributes_classify_reparse_points_correctly(
     class FakeWindll:
         kernel32 = FakeKernel()
 
-    monkeypatch.setattr(platform_utils.os, "name", "nt")
     monkeypatch.setattr(platform_utils.ctypes, "windll", FakeWindll(), raising=False)
     monkeypatch.setattr(platform_utils, "to_extended_path", lambda path: str(path))
     monkeypatch.setattr(platform_utils.os.path, "lexists", lambda _path: False)
 
-    assert platform_utils.is_reparse_point(Path("C:/candidate")) is expected
+    assert platform_utils._windows_is_reparse_point(Path("C:/candidate")) is expected
     assert fake_function.argtypes
     assert fake_function.restype is not None
 

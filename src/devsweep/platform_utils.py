@@ -41,6 +41,12 @@ def is_reparse_point(path: Path) -> bool:
 
     if os.name != "nt":
         return False
+    return _windows_is_reparse_point(path)
+
+
+def _windows_is_reparse_point(path: Path) -> bool:
+    """Read Windows attributes; split out so Win32 behavior can be unit tested elsewhere."""
+
     try:
         get_attributes = ctypes.windll.kernel32.GetFileAttributesW
         get_attributes.argtypes = [wintypes.LPCWSTR]
