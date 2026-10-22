@@ -11,13 +11,8 @@ if ($null -eq $pythonCommand) {
 }
 
 $python = $pythonCommand.Source
-$versionOk = $true
-try {
-    & $python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)"
-} catch {
-    $versionOk = $false
-}
-if (-not $versionOk) {
+& $python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)"
+if ($LASTEXITCODE -ne 0) {
     Write-Error "devsweep requires Python 3.9 or newer."
     exit 1
 }
@@ -28,6 +23,10 @@ if (Get-Command pipx -ErrorAction SilentlyContinue) {
     & uv tool install $Repository
 } else {
     & $python -m pip install --user $Repository
+}
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "devsweep installation failed with exit code $LASTEXITCODE."
+    exit $LASTEXITCODE
 }
 
 $userScripts = Join-Path $env:APPDATA "Python\Scripts"

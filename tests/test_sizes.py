@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 import pytest
+from conftest import try_create_symlink
 
 from devsweep.sizes import _error_text, directory_size, human_size, parse_size, path_size
 
@@ -12,10 +13,8 @@ def test_directory_size_skips_symlinks(tmp_path: Path) -> None:
     folder = tmp_path / "folder"
     folder.mkdir()
     (folder / "a.txt").write_bytes(b"abc")
-    try:
-        (folder / "link").symlink_to(tmp_path, target_is_directory=True)
-    except (OSError, NotImplementedError):
-        pytest.skip("symlinks unavailable")
+    if not try_create_symlink(folder / "link", tmp_path, target_is_directory=True):
+        pytest.skip("symlink creation is unavailable for this user or filesystem")
     errors: list[tuple[Path, str]] = []
     assert directory_size(folder, lambda path, reason: errors.append((path, reason))) == 3
     assert errors and errors[0][1] == "symlink skipped"
@@ -49,10 +48,8 @@ def test_path_size_handles_symlink_and_stat_errors(tmp_path: Path, monkeypatch: 
     target = tmp_path / "target"
     target.write_text("target", encoding="utf-8")
     link = tmp_path / "link"
-    try:
-        link.symlink_to(target)
-    except (OSError, NotImplementedError):
-        pytest.skip("symlinks unavailable")
+    if not try_create_symlink(link, target):
+        pytest.skip("symlink creation is unavailable for this user or filesystem")
     assert path_size(link) == 0
 
     class BrokenPath:

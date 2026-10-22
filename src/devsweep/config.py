@@ -1,4 +1,4 @@
-"""Optional TOML configuration (available on Python 3.11 and newer)."""
+"""Optional TOML configuration on all supported Python versions."""
 
 from __future__ import annotations
 
@@ -6,6 +6,11 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.9 and 3.10
+    import tomli as tomllib
 
 
 def config_path(env: dict[str, str] | None = None, platform: str | None = None) -> Path:
@@ -19,12 +24,6 @@ def config_path(env: dict[str, str] | None = None, platform: str | None = None) 
 
 
 def load_config(env: dict[str, str] | None = None, platform: str | None = None) -> dict[str, Any]:
-    if sys.version_info < (3, 11):
-        return {}
-    try:
-        import tomllib
-    except ImportError:  # pragma: no cover - only Python 3.10 and older
-        return {}
     path = config_path(env, platform)
     try:
         with path.open("rb") as stream:

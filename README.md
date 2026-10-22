@@ -32,8 +32,9 @@ The first `clean` invocation is a preview. Nothing is removed unless you use
 
 ## Installation
 
-`devsweep` requires Python 3.9 or newer and has no third-party runtime
-dependencies. The commands below install the current GitHub version.
+`devsweep` requires Python 3.9 or newer. Python 3.9 and 3.10 install the small
+`tomli` compatibility dependency for TOML configuration; Python 3.11 and newer
+use the standard library. The commands below install the current GitHub version.
 
 ### Linux and Windows
 
@@ -290,9 +291,9 @@ Configuration is optional. It is read from:
 - Linux: `$XDG_CONFIG_HOME/devsweep/config.toml`, or `~/.config/devsweep/config.toml`
 - Windows: `%APPDATA%\devsweep\config.toml`
 
-Python 3.9 and 3.10 skip the file silently because the standard library did
-not include `tomllib` yet. Configuration support requires Python 3.11 or
-newer. CLI flags override config values.
+Configuration is supported on every supported Python version. Python 3.9 and
+3.10 use `tomli`; Python 3.11 and newer use the standard-library `tomllib`.
+Missing or invalid files are ignored. CLI flags override config values.
 
 Example:
 
@@ -381,10 +382,12 @@ strictly limited command set described above.
 
 ### How do I report a safety issue?
 
-Please open an issue with the operating system, Python version, exact command,
-and a synthetic reproduction that contains no private paths or credentials.
-Safety regressions should be marked clearly because false-positive deletion is
-a critical bug.
+For a security vulnerability, report it through the repository's private
+[security advisory form](https://github.com/Abhishek764/devsweep/security/advisories/new).
+Do not publish exploit details, private paths, or credentials in a public issue.
+For other safety regressions, open a bug report with the operating system,
+Python version, exact command, and a synthetic reproduction. False-positive
+deletion is a critical bug and should be labeled clearly.
 
 ## Development and contributing
 
@@ -398,7 +401,8 @@ python3 -m venv .venv
 .venv/bin/ruff check .
 ```
 
-Runtime code remains standard-library only. Changes that affect scanning or
+Runtime code uses the standard library, with `tomli` installed only on Python
+3.9 and 3.10. Changes that affect scanning or
 deletion must include regression tests for both the safe positive case and the
 nearby unsafe case.
 

@@ -14,7 +14,12 @@ from typing import Callable
 
 from .git import git_activity_paths, repository_status
 from .ignore import load_devsweep_patterns, matches
-from .platform_utils import is_reparse_point, is_symlink_or_reparse, to_extended_path
+from .platform_utils import (
+    is_reparse_point,
+    is_symlink_or_reparse,
+    to_extended_path,
+    to_public_path,
+)
 from .sizes import path_size
 from .targets import TARGET_REGISTRY, TargetSpec, marker_matches
 
@@ -106,7 +111,7 @@ def project_activity(project: Path) -> float:
         try:
             with os.scandir(to_extended_path(current)) as entries:
                 for entry in entries:
-                    child = Path(entry.path)
+                    child = to_public_path(entry.path)
                     name = entry.name.casefold() if os.name == "nt" else entry.name
                     try:
                         if name == ".git":
@@ -138,7 +143,7 @@ def _walk_candidates(
         try:
             with os.scandir(to_extended_path(current)) as entries:
                 for entry in entries:
-                    child = Path(entry.path)
+                    child = to_public_path(entry.path)
                     try:
                         if matches(child, root, patterns):
                             result.skipped.append(Skipped(child, "ignored by pattern"))
@@ -254,12 +259,16 @@ def scan(
             )
         )
 
+    def path_order(item: Target) -> tuple[str, str]:
+        value = os.fspath(item.path)
+        return value.casefold(), value
+
     if sort == "size":
-        result.items.sort(key=lambda item: (-item.size, os.fspath(item.path).casefold()))
+        result.items.sort(key=lambda item: (-item.size, *path_order(item)))
     elif sort == "age":
-        result.items.sort(key=lambda item: (-item.age_seconds, os.fspath(item.path).casefold()))
+        result.items.sort(key=lambda item: (-item.age_seconds, *path_order(item)))
     elif sort == "path":
-        result.items.sort(key=lambda item: os.fspath(item.path).casefold())
+        result.items.sort(key=path_order)
     else:
         raise ValueError("sort must be size, age, or path")
     return result

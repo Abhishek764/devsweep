@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Callable
 
-from .platform_utils import is_symlink_or_reparse, to_extended_path
+from .platform_utils import is_symlink_or_reparse, to_extended_path, to_public_path
 
 
 def directory_size(path: Path, on_error: Callable[[Path, str], None] | None = None) -> int:
@@ -19,7 +19,7 @@ def directory_size(path: Path, on_error: Callable[[Path, str], None] | None = No
         try:
             with os.scandir(to_extended_path(current)) as entries:
                 for entry in entries:
-                    child = Path(entry.path)
+                    child = to_public_path(entry.path)
                     try:
                         if entry.is_symlink() or is_symlink_or_reparse(child):
                             if on_error:

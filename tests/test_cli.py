@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import os
 import time
@@ -41,6 +42,25 @@ def test_clean_json_yes_emits_one_document_and_removes_target(project: Path, cap
     assert payload["dry_run"] is False
     assert payload["deleted"]
     assert not (project / "node_modules").exists()
+
+
+def test_json_progress_diagnostics_stay_on_stderr(project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    import devsweep.cli as cli
+
+    class TTY(io.StringIO):
+        encoding = "utf-8"
+
+        def isatty(self) -> bool:
+            return True
+
+    diagnostics = TTY()
+    monkeypatch.setattr(cli.sys, "stderr", diagnostics)
+
+    assert main(["scan", os.fspath(project), "--json", "--older-than", "30d"]) == 0
+
+    output = capsys.readouterr().out
+    assert json.loads(output)["items"]
+    assert "Scanning" in diagnostics.getvalue()
 
 
 def test_cli_handles_invalid_size_and_missing_root(project: Path, capsys: pytest.CaptureFixture[str]) -> None:

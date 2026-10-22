@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import os
 import sys
+from ctypes import wintypes
 from pathlib import Path
 
 FILE_ATTRIBUTE_REPARSE_POINT = 0x0400
@@ -24,13 +25,27 @@ def to_extended_path(path: Path | str) -> str:
     return "\\\\?\\" + absolute
 
 
+def to_public_path(path: Path | str) -> Path:
+    """Strip Windows long-path prefixes from paths exposed by filesystem APIs."""
+
+    value = os.fspath(path)
+    if value.startswith("\\\\?\\UNC\\"):
+        value = "\\\\" + value[8:]
+    elif value.startswith("\\\\?\\"):
+        value = value[4:]
+    return Path(value)
+
+
 def is_reparse_point(path: Path) -> bool:
     """Detect Windows junctions/reparse points without traversing them."""
 
     if os.name != "nt":
         return False
     try:
-        attributes = ctypes.windll.kernel32.GetFileAttributesW(ctypes.c_wchar_p(to_extended_path(path)))
+        get_attributes = ctypes.windll.kernel32.GetFileAttributesW
+        get_attributes.argtypes = [wintypes.LPCWSTR]
+        get_attributes.restype = wintypes.DWORD
+        attributes = get_attributes(to_extended_path(path))
         if attributes == 0xFFFFFFFF:
             try:
                 return os.path.lexists(os.fspath(path))
@@ -55,14 +70,14 @@ def is_symlink_or_reparse(path: Path) -> bool:
 def path_key(path: Path | str) -> str:
     """Normalize a path for containment comparisons (case-insensitive on Windows)."""
 
-    value = os.path.abspath(os.fspath(path))
+    value = os.path.abspath(os.fspath(to_public_path(path)))
     return os.path.normcase(os.path.normpath(value))
 
 
 def resolved_key(path: Path | str) -> str:
     """Normalize a real path, resolving existing links for safety checks."""
 
-    return path_key(Path(os.path.realpath(os.fspath(path))))
+    return path_key(Path(os.path.realpath(os.fspath(to_public_path(path)))))
 
 
 def is_strict_descendant(root: Path, target: Path) -> bool:

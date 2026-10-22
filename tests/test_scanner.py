@@ -7,7 +7,9 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
+from conftest import try_create_symlink
 
+from devsweep.platform_utils import to_public_path
 from devsweep.scanner import (
     ScanResult,
     _duration_seconds,
@@ -79,10 +81,8 @@ def test_symlinked_target_is_skipped_and_never_followed(tmp_path: Path) -> None:
     outside.mkdir()
     write(outside / "secret.txt", "do not touch")
     link = tmp_path / "node_modules"
-    try:
-        link.symlink_to(outside, target_is_directory=True)
-    except (OSError, NotImplementedError):
-        pytest.skip("symlinks unavailable")
+    if not try_create_symlink(link, outside, target_is_directory=True):
+        pytest.skip("symlink creation is unavailable for this user or filesystem")
 
     result = scan(tmp_path, older_than=0)
     assert result.items == []
@@ -200,6 +200,20 @@ def test_empty_unicode_and_space_named_targets_and_sorting(tmp_path: Path) -> No
     assert scanned(tmp_path, older_than=1, sort="age")
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows paths are case-insensitive")
+def test_casefold_ties_have_stable_raw_path_order(tmp_path: Path) -> None:
+    for name in ("Alpha", "alpha"):
+        project = tmp_path / name
+        write(project / "package.json", "{}")
+        (project / "node_modules").mkdir()
+        os.utime(project / "package.json", (1_000_000, 1_000_000))
+
+    items = scanned(tmp_path, older_than=1, sort="path")
+
+    paths = [os.fspath(item.path) for item in items]
+    assert paths == sorted(paths, key=lambda value: (value.casefold(), value))
+
+
 def test_nested_python_cache_uses_project_marker_ancestor(tmp_path: Path) -> None:
     write(tmp_path / "pyproject.toml", "[project]\nname='x'")
     cache = tmp_path / "src" / "module" / "__pycache__"
@@ -236,10 +250,8 @@ def test_scanner_helpers_cover_git_activity_progress_and_missing_paths(tmp_path:
     assert project_activity(tmp_path) > 0
     assert _safe_mtime(tmp_path / "missing") is None
     link = tmp_path / "link"
-    try:
-        link.symlink_to(git, target_is_directory=True)
-    except (OSError, NotImplementedError):
-        pytest.skip("symlinks unavailable")
+    if not try_create_symlink(link, git, target_is_directory=True):
+        pytest.skip("symlink creation is unavailable for this user or filesystem")
     assert _safe_mtime(link) is None
     write(tmp_path / "package.json", "{}")
     (tmp_path / "node_modules").mkdir()
@@ -251,17 +263,13 @@ def test_scanner_helpers_cover_git_activity_progress_and_missing_paths(tmp_path:
 
 
 def test_scan_root_symlink_and_scandir_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    try:
-        link = tmp_path / "root-link"
-        link.symlink_to(tmp_path, target_is_directory=True)
-    except (OSError, NotImplementedError):
-        link = None
-    if link is not None:
+    link = tmp_path / "root-link"
+    if try_create_symlink(link, tmp_path, target_is_directory=True):
         assert scan(link).skipped
     real_scandir = os.scandir
 
     def broken(path):
-        if Path(path) == tmp_path:
+        if to_public_path(path) == tmp_path:
             raise PermissionError(13, "denied")
         return real_scandir(path)
 
@@ -276,10 +284,8 @@ def test_project_activity_skips_target_symlink_and_size_records_inner_symlink(tm
     target.mkdir()
     outside = tmp_path.parent / "size-outside"
     outside.mkdir(exist_ok=True)
-    try:
-        (target / "link").symlink_to(outside, target_is_directory=True)
-    except (OSError, NotImplementedError):
-        pytest.skip("symlinks unavailable")
+    if not try_create_symlink(target / "link", outside, target_is_directory=True):
+        pytest.skip("symlink creation is unavailable for this user or filesystem")
     make_old(tmp_path / "package.json")
     result = scan(tmp_path, older_than=1)
     assert result.items

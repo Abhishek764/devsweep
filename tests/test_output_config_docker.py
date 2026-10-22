@@ -27,6 +27,8 @@ def test_config_path_and_toml_are_optional(tmp_path: Path) -> None:
     path.parent.mkdir()
     path.write_text('older_than = "7d"\n', encoding="utf-8")
     assert load_config(env=env, platform="linux")["older_than"] == "7d"
+    path.write_text("older_than = [\n", encoding="utf-8")
+    assert load_config(env=env, platform="linux") == {}
 
 
 def test_docker_missing_is_friendly(monkeypatch) -> None:
