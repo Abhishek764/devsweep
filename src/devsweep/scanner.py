@@ -22,7 +22,7 @@ from .platform_utils import (
     to_public_path,
 )
 from .sizes import path_size
-from .targets import TARGET_REGISTRY, TargetSpec, marker_matches
+from .targets import TARGET_REGISTRY, TargetSpec, _has_python_marker, marker_matches
 
 
 @dataclass(frozen=True)
@@ -73,12 +73,20 @@ def _project_root(target: Path, project: Path, scan_root: Path, spec: TargetSpec
 
     current = project
     marker_project = project
+    found_python_marker = False
     while True:
         try:
-            if (current / ".git").exists():
+            if (current / ".git").exists() and not (
+                spec.marker == "python_project" and found_python_marker
+            ):
                 return current
-            if spec.marker == "python_project" and marker_matches(spec, target, current):
+            if (
+                spec.marker == "python_project"
+                and not found_python_marker
+                and _has_python_marker(current)
+            ):
                 marker_project = current
+                found_python_marker = True
         except OSError:
             break
         if current == scan_root or current.parent == current:
@@ -106,7 +114,6 @@ def project_activity(project: Path) -> float:
             newest = max(newest, value)
 
     stack = [project]
-    generated_names = {spec.directory.casefold() if os.name == "nt" else spec.directory for spec in TARGET_REGISTRY}
     while stack:
         current = stack.pop()
         try:
@@ -117,7 +124,7 @@ def project_activity(project: Path) -> float:
                     try:
                         if name == ".git":
                             continue
-                        if name in generated_names:
+                        if _candidate_spec(child, current) is not None:
                             continue
                         if entry.is_symlink() or is_reparse_point(child):
                             continue
@@ -181,6 +188,7 @@ def scan(
     sort: str = "size",
     now: float | None = None,
     progress: Callable[[int], None] | None = None,
+    progress_start: Callable[[int], None] | None = None,
 ) -> ScanResult:
     """Scan *root* while applying all conservative detection rules."""
 
@@ -203,6 +211,8 @@ def scan(
 
     patterns = load_devsweep_patterns(scan_root, excludes)
     candidates = _walk_candidates(scan_root, patterns, result)
+    if candidates and progress_start:
+        progress_start(len(candidates))
     selected_types = set(types)
     threshold = _duration_seconds(older_than)
     current_time = time.time() if now is None else now
@@ -235,7 +245,7 @@ def scan(
         if status == "dirty" and not force:
             result.skipped.append(Skipped(target_path, "git project has uncommitted changes"))
             continue
-        if status == "unavailable" and not force:
+        if status == "unknown" or (status == "unavailable" and not force):
             result.skipped.append(Skipped(target_path, "git status could not be verified"))
             continue
         activity = project_activity(project)

@@ -25,6 +25,7 @@ def test_windows_cache_locations_use_environment_variables(tmp_path: Path) -> No
     specs = cache_specs(env=env, platform="win32", include_nuget=True)
     assert any(item.path == tmp_path / "local" / "npm-cache" for item in specs)
     assert any(item.path == tmp_path / "roaming" / "Code" / "Cache" for item in specs)
+    assert not any(item.tool == "JetBrains" for item in specs)
     assert any(item.tool == "NuGet global packages" for item in specs)
 
 

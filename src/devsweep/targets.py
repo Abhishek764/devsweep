@@ -73,19 +73,23 @@ def _has_any(path: Path, names: Iterable[str]) -> bool:
     return any(_is_regular_file(path / name) for name in names)
 
 
+def _has_python_marker(project: Path) -> bool:
+    if _has_any(project, ("pyproject.toml", "setup.py", "requirements.txt")):
+        return True
+    try:
+        return any(
+            _is_regular_file(entry) and entry.suffix.lower() == ".py"
+            for entry in project.iterdir()
+        )
+    except (OSError, PermissionError):
+        return False
+
+
 def _nearby_python_marker(project: Path) -> bool:
     current = project
     for _ in range(4):
-        if _has_any(current, ("pyproject.toml", "setup.py", "requirements.txt")):
+        if _has_python_marker(current):
             return True
-        try:
-            if any(
-                _is_regular_file(entry) and entry.suffix.lower() == ".py"
-                for entry in current.iterdir()
-            ):
-                return True
-        except (OSError, PermissionError):
-            return False
         if current.parent == current:
             break
         current = current.parent

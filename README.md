@@ -1,6 +1,8 @@
-# devsweep
+<p align="center">
+  <img src="assets/devsweep-graffiti.svg" alt="DevSweep — Sweep the Build-Up" width="760">
+</p>
 
-Safely find and remove reclaimable developer build artifacts, dependency folders, and caches.
+<p align="center"><strong>Safely find and remove reclaimable developer build artifacts, dependency folders, and caches.</strong></p>
 
 `devsweep` is a conservative, dry-run-first CLI for Linux and Windows 10/11.
 It only lists a directory when its ecosystem marker proves that the directory
@@ -46,6 +48,21 @@ uvx --from git+https://github.com/abhishek764/devsweep devsweep scan .
 
 Use either `pipx` or `uv tool install` for a persistent installation. `uvx`
 runs the command without installing it permanently.
+
+The installers pass through the package manager's native download progress
+when the terminal supports it. During a scan, DevSweep shows a determinate
+progress bar on an interactive terminal; progress stays on stderr so JSON
+output remains clean.
+
+After installation, update DevSweep in place with:
+
+```bash
+devsweep update
+```
+
+The update command uses `pipx`, `uv`, or the active Python environment and
+fetches the official GitHub source. Package-manager download progress is
+shown when supported.
 
 ### Linux installer
 

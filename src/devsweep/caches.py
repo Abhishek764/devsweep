@@ -73,7 +73,6 @@ def cache_specs(
                 CacheSpec("Go", local / "go-build", "go clean -cache"),
                 CacheSpec("VS Code", roaming / "Code" / "Cache", "code --clear-cache"),
                 CacheSpec("VS Code", roaming / "Code" / "CachedData", "code --clear-cache"),
-                CacheSpec("JetBrains", local / "JetBrains", "# remove selected JetBrains cache"),
                 CacheSpec("NuGet HTTP", local / "NuGet" / "v3-cache", "dotnet nuget locals http-cache --clear"),
                 CacheSpec(
                     "NuGet temp",

@@ -31,6 +31,12 @@ def test_config_path_and_toml_are_optional(tmp_path: Path) -> None:
     assert load_config(env=env, platform="linux") == {}
 
 
+def test_empty_xdg_config_home_uses_home_default(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("devsweep.config.Path.home", lambda: tmp_path)
+    path = config_path(env={"HOME": str(tmp_path), "XDG_CONFIG_HOME": ""}, platform="linux")
+    assert path == tmp_path / ".config" / "devsweep" / "config.toml"
+
+
 def test_docker_missing_is_friendly(monkeypatch) -> None:
     monkeypatch.setattr("devsweep.docker.shutil.which", lambda command: None)
     result = docker_cleanup()

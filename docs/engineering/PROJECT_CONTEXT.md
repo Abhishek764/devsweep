@@ -1,142 +1,42 @@
-# DevSweep — Project Context
+# DevSweep project context
 
-> Living document describing the product vision, users, core behavior, and
-> engineering constraints for DevSweep.
+Last reviewed: 2026-10-30. Treat GitHub for live issue/PR state and `pyproject.toml` for package metadata.
 
-| Field       | Value                                |
-|-------------|--------------------------------------|
-| Product     | DevSweep                             |
-| Version     | 0.1.0                                |
-| Status      | Alpha — functional, narrowing scope  |
-| License     | MIT                                  |
-| Python      | ≥ 3.9                                |
-| Platforms   | Linux, Windows                       |
-| Last review | 2026-10-29                           |
+## Product and users
 
----
+DevSweep is an alpha Python CLI that discovers explicitly recognized developer-generated directories and offers a dry-run-first cleanup workflow. Its users are individual developers and build/CI maintainers who need to understand what will be removed and why. It is not a generic recursive “delete cache/build/temp” tool.
 
-## 1. Product Vision
+## Current behavior
 
-**DevSweep is a safety-first developer disk cleanup CLI.**
+- `scan` traverses a supplied root, applies ignore/exclude rules, identifies targets from the registry in `src/devsweep/targets.py`, calculates logical sizes, checks project activity and Git status, and emits text or JSON.
+- `clean` consumes recognized targets and is non-destructive by default; deletion requires explicit selection/confirmation. It validates containment, markers, symlink/reparse status and target identity again.
+- `caches` reports a fixed list of global cache paths, with some high-risk locations opt-in. Treat cache deletion separately from project target cleanup.
+- `docker` reports Docker disk usage through the Docker CLI.
 
-Developers accumulate build artifacts, dependency caches, and toolchain
-by-products across dozens of projects. DevSweep scans a directory tree,
-identifies reclaimable disk space, and deletes it — but only when the evidence
-is unambiguous and the operation is safe.
+## Safety rules
 
----
+1. A directory name alone never authorizes project cleanup; registry marker rules must match.
+2. Do not follow symlinks or Windows reparse points during discovery or deletion.
+3. Keep cleanup strictly inside the requested scan root and reject dangerous roots.
+4. Skip dirty projects by default and fail closed when Git status is unknown. `--force` does not bypass unknown status or path/marker checks.
+5. Use dry-run by default; require explicit user selection for destructive actions.
+6. Keep failure reasons visible and do not overstate reclaimed bytes or atomic race protection.
 
-## 2. Target Users
+## Support and distribution
 
-| Persona | Description |
-|---------|-------------|
-| Individual developer | Runs `devsweep scan ~/projects` periodically to reclaim space on a laptop. |
-| CI maintainer | Cleans build caches between pipeline runs. |
-| DevOps engineer | Audits disk usage across shared build hosts. |
+`pyproject.toml` declares Python ≥3.9, Linux and Windows, a setuptools `src` layout, and the `devsweep` console entry point. CI is configured for Ubuntu and Windows on Python 3.9, 3.11, and 3.13. macOS is not currently an explicit support target. Pip/uv installation is intended but registry availability and clean-environment installs have not been verified in this review. There is no npm launcher.
 
----
+## Architecture and priorities
 
-## 3. Core Behavior
+See [ARCHITECTURE.md](ARCHITECTURE.md). Current module boundaries are small and task-focused; avoid a plugin framework or second cleanup implementation without a concrete need.
 
-1. **Scan** — Walk a directory tree, match projects against a registry of 25
-   known target specifications, calculate reclaimable size.
-2. **Clean** — Delete identified targets after a double safety re-check,
-   respecting dry-run default.
-3. **Caches** — Report global cache locations (pip, npm, cargo, etc.) per
-   platform.
-4. **Docker** — Report Docker disk usage via `docker system df`.
+Priority order: (1) safety issues and global cache scope, (2) verified functional bugs, (3) cross-platform and packaging validation, (4) coverage and contributor/docs gaps, (5) measured performance, then justified features. The live issue index is [ISSUE_TRACKER.md](ISSUE_TRACKER.md); open issues do not automatically mean their reported behavior is currently reproducible.
 
----
+## Known unknowns
 
-## 4. Non-Goals
-
-- **macOS explicit support** — Not tested or targeted (may work incidentally).
-- **GUI** — CLI only; rich TUI is out of scope.
-- **Daemon / watch mode** — No background process; run on demand.
-- **Cloud storage** — Local filesystems only.
-- **Package manager integration** — DevSweep does not modify lock files or
-  dependency manifests.
-
----
-
-## 5. Safety Principles
-
-DevSweep's safety model is the product's defining characteristic. All 13
-principles are load-bearing:
-
-| # | Principle | Description |
-|---|-----------|-------------|
-| 1 | Marker evidence mandatory | A target is only recognized when its marker file/directory is present. |
-| 2 | Symlinks never followed | All symlink targets are skipped to prevent escaping the scan root. |
-| 3 | Deletion contained below scan root | No path outside the scan root is ever deleted. |
-| 4 | Dangerous roots refused | Scanning `/`, `C:\`, home directories, etc. is rejected outright. |
-| 5 | Dirty Git projects skipped | Projects with uncommitted changes are not cleaned. |
-| 6 | Staleness based on project activity | Only stale projects (no recent activity) are candidates. |
-| 7 | Known marker rules conservative | The target registry errs on the side of not matching. |
-| 8 | Targets atomic | Each target is a single unit — no double-counting across specs. |
-| 9 | Ignore files respected | `.devsweepignore` and similar patterns are honored. |
-| 10 | Failures isolated | One failed deletion does not abort the entire run. |
-| 11 | Uncertainty means skip | If the tool cannot determine safety, the target is skipped. |
-| 12 | Deletion explicit | Dry-run is the default; `--no-dry-run` required for actual deletion. |
-| 13 | Interrupts clean | Ctrl-C leaves the filesystem in a consistent state. |
-
----
-
-## 6. Supported Platforms
-
-| Platform | Status | Notes |
-|----------|--------|-------|
-| Linux    | Supported | Primary development platform. |
-| Windows  | Supported | Long path support, reparse point handling, case-insensitive matching. |
-| macOS    | Out of scope | No explicit support; may work but untested. |
-
----
-
-## 7. Distribution
-
-| Channel | Command |
-|---------|---------|
-| PyPI (pip) | `pip install devsweep` |
-| uv | `uv pip install devsweep` |
-| npm (optional launcher) | `npx devsweep` |
-
----
-
-## 8. Module Overview
-
-| Module | Lines | Responsibility |
-|--------|-------|----------------|
-| `cli.py` | ~380 | Argparse CLI, subcommands (scan/clean/caches/docker), config merge |
-| `scanner.py` | ~269 | Core scanning engine, target discovery, parallel sizing via `ThreadPoolExecutor` |
-| `cleaner.py` | ~195 | Deletion with double safety re-check, TOCTOU mitigation |
-| `targets.py` | ~150 | Data-driven registry of 25 `TargetSpec`s, marker matching |
-| `caches.py` | ~150 | Global cache locations per platform |
-| `platform_utils.py` | ~200 | Windows long paths, reparse points, dangerous roots, `safe_rmtree`, `error_text` |
-| `output.py` | ~117 | ANSI colors, tables, progress, JSON output |
-| `sizes.py` | ~86 | Size calculation, human formatting, parsing |
-| `ignore.py` | ~92 | Conservative gitignore-style pattern matching |
-| `git.py` | ~52 | Git status checking |
-| `docker.py` | ~48 | Docker disk reporting |
-| `config.py` | ~34 | Optional TOML config loading |
-
----
-
-## 9. Engineering Priorities
-
-1. **Safety** — Never delete something the user did not intend.
-2. **Correctness** — Accurate size reporting and target identification.
-3. **Cross-platform** — Linux and Windows parity.
-4. **Performance** — Parallel sizing; single-pass scanning where possible.
-5. **Simplicity** — Small codebase, minimal dependencies.
-
----
-
-## 10. Open Questions / Unknowns
-
-- **macOS support** — Community demand is unclear; no contributor has tested.
-- **Plugin system** — Should third parties be able to register custom
-  `TargetSpec`s? Deferred.
-- **`git_available()` caching** — Called on every `repository_status()`; may be
-  worth caching but no performance data yet.
-- **FAT32/exFAT inode identity** — `st_ino == 0` makes the TOCTOU identity
-  check a no-op on these filesystems.
+- Path-based recursive deletion still has a TOCTOU race after the final validation.
+- Filesystem logical sizes can overcount hard links and do not equal allocated/reclaimed blocks.
+- Current task's tests ran only on Windows; no current remote CI result was queried.
+- macOS semantics remain untested and unsupported.
+- Current pip/uv registry availability, wheel/sdist cleanliness, and installation behavior remain unverified.
+- Historical rationale for existing implementation choices is unknown unless recorded in an ADR.
