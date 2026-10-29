@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import os
-import shutil
 import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from .platform_utils import is_symlink_or_reparse, to_extended_path
+from .platform_utils import is_symlink_or_reparse, safe_rmtree, to_extended_path
 from .sizes import path_size
 
 
@@ -143,19 +142,9 @@ def clean_caches(entries: Iterable[CacheEntry], *, yes: bool = False) -> CacheCl
                 failures.append(CacheFailure(path, "symlink or junction skipped"))
                 continue
             before = path_size(path)
-            shutil.rmtree(to_extended_path(path), onerror=_read_only_retry)
+            safe_rmtree(to_extended_path(path))
             after = path_size(path) if path.exists() else 0
             deleted.append(CacheEntry(entry.spec, max(0, before - after)))
         except (OSError, PermissionError) as exc:
             failures.append(CacheFailure(path, str(exc) or exc.__class__.__name__))
     return CacheCleanResult(deleted, failures)
-
-
-def _read_only_retry(function, path: str, exc_info) -> None:
-    if os.name != "nt":
-        raise exc_info[1]
-    try:
-        os.chmod(path, 0o700)
-        function(path)
-    except OSError as exc:
-        raise exc from exc_info[1]

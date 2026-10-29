@@ -15,6 +15,7 @@ from typing import Callable
 from .git import git_activity_paths, repository_status
 from .ignore import load_devsweep_patterns, matches
 from .platform_utils import (
+    error_text,
     is_reparse_point,
     is_symlink_or_reparse,
     to_extended_path,
@@ -163,16 +164,10 @@ def _walk_candidates(
                             continue
                         stack.append(child)
                     except OSError as exc:
-                        result.skipped.append(Skipped(child, _error_text(exc)))
+                        result.skipped.append(Skipped(child, error_text(exc)))
         except OSError as exc:
-            result.skipped.append(Skipped(current, _error_text(exc)))
+            result.skipped.append(Skipped(current, error_text(exc)))
     return candidates
-
-
-def _error_text(exc: OSError) -> str:
-    if getattr(exc, "errno", None) == 13:
-        return "permission denied"
-    return str(exc) or exc.__class__.__name__
 
 
 def scan(
@@ -203,7 +198,7 @@ def scan(
             return result
         scan_root = Path(os.path.abspath(os.fspath(scan_root)))
     except OSError as exc:
-        result.skipped.append(Skipped(scan_root, _error_text(exc)))
+        result.skipped.append(Skipped(scan_root, error_text(exc)))
         return result
 
     patterns = load_devsweep_patterns(scan_root, excludes)

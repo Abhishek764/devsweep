@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Callable
 
-from .platform_utils import is_symlink_or_reparse, to_extended_path, to_public_path
+from .platform_utils import error_text, is_symlink_or_reparse, to_extended_path, to_public_path
 
 
 def directory_size(path: Path, on_error: Callable[[Path, str], None] | None = None) -> int:
@@ -31,10 +31,10 @@ def directory_size(path: Path, on_error: Callable[[Path, str], None] | None = No
                             total += entry.stat(follow_symlinks=False).st_size
                     except OSError as exc:
                         if on_error:
-                            on_error(child, _error_text(exc))
+                            on_error(child, error_text(exc))
         except OSError as exc:
             if on_error:
-                on_error(current, _error_text(exc))
+                on_error(current, error_text(exc))
     return total
 
 
@@ -47,14 +47,8 @@ def path_size(path: Path, on_error: Callable[[Path, str], None] | None = None) -
         return directory_size(path, on_error=on_error)
     except OSError as exc:
         if on_error:
-            on_error(path, _error_text(exc))
+            on_error(path, error_text(exc))
         return 0
-
-
-def _error_text(exc: OSError) -> str:
-    if getattr(exc, "errno", None) in (13,):
-        return "permission denied"
-    return str(exc) or exc.__class__.__name__
 
 
 def human_size(value: int) -> str:

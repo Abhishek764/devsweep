@@ -8,6 +8,7 @@ branch.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,8 +58,14 @@ TARGET_REGISTRY: tuple[TargetSpec, ...] = (
 
 
 def specs_for_directory(name: str) -> tuple[TargetSpec, ...]:
-    """Return registry entries that can apply to *name*."""
+    """Return registry entries that can apply to *name*.
 
+    Uses case-insensitive comparison on Windows to match the scanner's
+    ``_name_equal`` behavior.
+    """
+    if os.name == "nt":
+        folded = name.casefold()
+        return tuple(spec for spec in TARGET_REGISTRY if spec.directory.casefold() == folded)
     return tuple(spec for spec in TARGET_REGISTRY if spec.directory == name)
 
 
