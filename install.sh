@@ -12,12 +12,14 @@ if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) el
     exit 1
 fi
 
+printf '%s\n' "Downloading and installing DevSweep; the installer will show transfer progress when available."
+
 if command -v pipx >/dev/null 2>&1; then
-    pipx install "$REPOSITORY"
+    PIP_PROGRESS_BAR=on pipx install "$REPOSITORY"
 elif command -v uv >/dev/null 2>&1; then
     uv tool install "$REPOSITORY"
 else
-    python3 -m pip install --user "$REPOSITORY"
+    PIP_PROGRESS_BAR=on python3 -m pip install --user "$REPOSITORY"
 fi
 
 case ":${PATH}:" in
@@ -27,3 +29,4 @@ case ":${PATH}:" in
         ;;
 esac
 printf '%s\n' "Installed devsweep. Try: devsweep scan ."
+printf '%s\n' "To update later: devsweep update"

@@ -29,6 +29,7 @@ from .output import (
 from .platform_utils import is_dangerous_root, is_symlink_or_reparse, supports_unicode
 from .scanner import ScanResult, Target, scan
 from .sizes import parse_size
+from .updater import UpdateError, update
 
 
 def _add_common(parser: argparse.ArgumentParser, *, suppress_defaults: bool = False) -> None:
@@ -73,12 +74,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     docker_parser = subparsers.add_parser("docker", help="report or prune restricted Docker data", description="Report Docker reclaimable data; never touches volumes or containers.")
     _add_common(docker_parser, suppress_defaults=True)
+
+    update_parser = subparsers.add_parser(
+        "update",
+        help="update the installed DevSweep command",
+        description="Update DevSweep from the official GitHub source using pipx, uv, or pip.",
+    )
+    update_parser.add_argument("--quiet", action="store_true", default=argparse.SUPPRESS, help="suppress update status messages")
     return parser
 
 
 def _config_value(args: argparse.Namespace, config: dict[str, Any], name: str, default: Any) -> Any:
     value = getattr(args, name, None)
-    return default if value is None else value if value is not False else config.get(name, default)
+    if value is None or value is False:
+        return config.get(name, default)
+    return value
 
 
 def _duration(value: str) -> float:
@@ -118,13 +128,19 @@ def _effective(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, An
 
 def _scan_progress(args: dict[str, Any]):
     if args["quiet"] or not getattr(sys.stderr, "isatty", lambda: False)():
-        return None, False
+        return None, None, False
     unicode_ok = supports_unicode(sys.stderr)
+    total = 1
+
+    def start(count: int) -> None:
+        nonlocal total
+        total = count
+        progress_line(sys.stderr, 0, total, unicode_ok)
 
     def update(count: int) -> None:
-        progress_line(sys.stderr, count, unicode_ok)
+        progress_line(sys.stderr, count, total, unicode_ok)
 
-    return update, True
+    return update, start, True
 
 
 def _target_json(item: Target, root: Path) -> dict[str, Any]:
@@ -251,9 +267,9 @@ def _print_caches(entries: Sequence[CacheEntry], settings: dict[str, Any], color
 
 def _handle_scan(args: argparse.Namespace, settings: dict[str, Any]) -> int:
     root = Path(args.path).expanduser()
-    progress, active = _scan_progress(settings)
+    progress, progress_start, active = _scan_progress(settings)
     try:
-        result = scan(root, older_than=settings["older_than"], min_size=settings["min_size"], types=settings["types"], excludes=settings["excludes"], force=settings["force"], sort=settings["sort"], progress=progress)
+        result = scan(root, older_than=settings["older_than"], min_size=settings["min_size"], types=settings["types"], excludes=settings["excludes"], force=settings["force"], sort=settings["sort"], progress=progress, progress_start=progress_start)
     finally:
         if active:
             clear_progress(sys.stderr)
@@ -269,9 +285,9 @@ def _handle_clean(args: argparse.Namespace, settings: dict[str, Any]) -> int:
     if not allow_dangerous and is_dangerous_root(root):
         write_line(sys.stderr, "Error: refusing to clean a system, drive-root, or home directory; use --i-know-what-i-am-doing")
         return 2
-    progress, active = _scan_progress(settings)
+    progress, progress_start, active = _scan_progress(settings)
     try:
-        scan_result = scan(root, older_than=settings["older_than"], min_size=settings["min_size"], types=settings["types"], excludes=settings["excludes"], force=settings["force"], sort=settings["sort"], progress=progress)
+        scan_result = scan(root, older_than=settings["older_than"], min_size=settings["min_size"], types=settings["types"], excludes=settings["excludes"], force=settings["force"], sort=settings["sort"], progress=progress, progress_start=progress_start)
     finally:
         if active:
             clear_progress(sys.stderr)
@@ -357,6 +373,19 @@ def _handle_docker(args: argparse.Namespace, settings: dict[str, Any]) -> int:
     return 1 if result.failures else 0
 
 
+def _handle_update(settings: dict[str, Any]) -> int:
+    if not settings["quiet"]:
+        write_line(sys.stdout, "Updating DevSweep from GitHub; download progress will appear when supported.")
+    try:
+        manager = update()
+    except UpdateError as exc:
+        write_line(sys.stderr, f"Error: {exc}")
+        return 1
+    if not settings["quiet"]:
+        write_line(sys.stdout, f"DevSweep updated successfully using {manager}.")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -370,6 +399,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _handle_caches(args, settings)
         if args.command == "docker":
             return _handle_docker(args, settings)
+        if args.command == "update":
+            return _handle_update(settings)
     except KeyboardInterrupt:
         write_line(sys.stderr, "Interrupted; no further deletions will be attempted.")
         return 130

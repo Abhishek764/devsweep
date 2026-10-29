@@ -90,13 +90,19 @@ def render_table(headers: Iterable[str], rows: Iterable[Iterable[str]]) -> str:
     return "\n".join(output)
 
 
-def progress_line(stream: TextIO, count: int, unicode_ok: bool) -> None:
-    symbol = "•" if unicode_ok else "."
+def progress_line(stream: TextIO, count: int, total: int, unicode_ok: bool) -> None:
+    total = max(1, total)
+    completed = min(total, max(0, count))
+    width = 24
+    filled = int(width * completed / total)
+    full, empty = ("█", "░") if unicode_ok else ("#", "-")
+    bar = full * filled + empty * (width - filled)
     try:
-        stream.write(f"\rScanning {symbol} {count}")
+        stream.write(f"\rScanning [{bar}] {completed}/{total} targets")
         stream.flush()
     except UnicodeEncodeError:
-        stream.write(f"\rScanning . {count}")
+        fallback = "#" * filled + "-" * (width - filled)
+        stream.write(f"\rScanning [{fallback}] {completed}/{total} targets")
         stream.flush()
 
 

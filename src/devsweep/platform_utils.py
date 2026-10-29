@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import ctypes
 import os
+import shutil
 import sys
-from ctypes import wintypes
 from pathlib import Path
+
+if sys.platform == "win32":
+    from ctypes import wintypes
 
 FILE_ATTRIBUTE_REPARSE_POINT = 0x0400
 
@@ -156,5 +159,47 @@ def supports_unicode(stream: object) -> bool:
     return "utf" in encoding.lower()
 
 
-def running_on_windows() -> bool:
-    return sys.platform == "win32"
+# ---------------------------------------------------------------------------
+# Shared helpers: rmtree with read-only retry, error text formatting
+# ---------------------------------------------------------------------------
+
+
+def _read_only_retry_onexc(func, path: str, exc: BaseException) -> None:
+    """``onexc`` handler for Python >= 3.12."""
+    if os.name != "nt":
+        raise exc
+    try:
+        os.chmod(path, 0o700)
+        func(path)
+    except OSError as new_exc:
+        raise new_exc from exc
+
+
+def _read_only_retry_onerror(func, path: str, exc_info) -> None:
+    """``onerror`` handler for Python < 3.12."""
+    if os.name != "nt":
+        raise exc_info[1]
+    try:
+        os.chmod(path, 0o700)
+        func(path)
+    except OSError as exc:
+        raise exc from exc_info[1]
+
+
+def safe_rmtree(path: Path | str) -> None:
+    """Remove a directory tree, retrying read-only files on Windows.
+
+    Uses ``onexc`` on Python >= 3.12 and ``onerror`` on older versions to
+    avoid the deprecation warning introduced in 3.12 and the removal in 3.14.
+    """
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=_read_only_retry_onexc)
+    else:
+        shutil.rmtree(path, onerror=_read_only_retry_onerror)
+
+
+def error_text(exc: BaseException) -> str:
+    """Return a human-readable one-line description of a filesystem error."""
+    if isinstance(exc, PermissionError):
+        return "permission denied"
+    return str(exc) or exc.__class__.__name__

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,6 +11,7 @@ from .platform_utils import (
     is_dangerous_root,
     is_strict_descendant,
     is_symlink_or_reparse,
+    safe_rmtree,
     to_extended_path,
 )
 from .scanner import Target
@@ -77,18 +77,6 @@ def parse_selection(value: str, count: int) -> list[int]:
     except (TypeError, ValueError) as exc:
         raise ValueError("invalid selection; use all, numbers, ranges such as 1-3, or q") from exc
     return sorted(selected)
-
-
-def _read_only_retry(function, path: str, exc_info) -> None:
-    """Clear Windows read-only bits before retrying a failed rmtree operation."""
-
-    if os.name != "nt":
-        raise exc_info[1]
-    try:
-        os.chmod(path, 0o700)
-        function(path)
-    except OSError as exc:
-        raise exc from exc_info[1]
 
 
 def _is_current_target(item: Target) -> bool:
@@ -194,7 +182,7 @@ def clean(
             result.skipped.append(CleanFailure(item.path, "already gone, skipped" if "disappeared" in reason else reason))
             continue
         try:
-            shutil.rmtree(to_extended_path(item.path), onerror=_read_only_retry)
+            safe_rmtree(to_extended_path(item.path))
         except KeyboardInterrupt:
             raise
         except (OSError, PermissionError) as exc:

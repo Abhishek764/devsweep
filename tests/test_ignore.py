@@ -24,6 +24,9 @@ def test_patterns_match_relative_paths_and_negation(tmp_path: Path) -> None:
     assert not _matches_one("foo", "/")
     assert _matches_one("a/foo/bar", "foo/")
     assert _matches_one("a/b", "b")
+    assert _matches_one("dist", "**/dist")
+    assert _matches_one("packages/app/dist", "**/dist/")
+    assert _matches_one("packages/app/dist", "packages/*/dist")
 
 
 def test_load_devsweep_patterns_includes_cli_patterns(tmp_path: Path) -> None:

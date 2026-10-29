@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 from conftest import try_create_symlink
 
-from devsweep.sizes import _error_text, directory_size, human_size, parse_size, path_size
+from devsweep.platform_utils import error_text
+from devsweep.sizes import directory_size, human_size, parse_size, path_size
 
 
 def test_directory_size_skips_symlinks(tmp_path: Path) -> None:
@@ -41,7 +42,7 @@ def test_sizes_and_human_formatting(tmp_path: Path) -> None:
         parse_size("nopeMB")
     with pytest.raises(ValueError):
         parse_size("-1MB")
-    assert _error_text(PermissionError(13, "denied")) == "permission denied"
+    assert error_text(PermissionError(13, "denied")) == "permission denied"
 
 
 def test_path_size_handles_symlink_and_stat_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

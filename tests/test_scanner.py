@@ -108,6 +108,47 @@ def test_project_activity_excludes_target_and_recent_project_is_skipped(tmp_path
     assert any("recent" in entry.reason for entry in result.skipped)
 
 
+def test_project_activity_counts_real_source_in_generic_named_folder(tmp_path: Path) -> None:
+    source = tmp_path / "bin" / "cli.js"
+    write(source, "source")
+    make_old(source)
+    stamp = time.time() - 60
+    os.utime(source, (stamp, stamp))
+
+    assert project_activity(tmp_path) == pytest.approx(stamp, abs=2)
+
+
+def test_unknown_git_status_skips_candidate_even_when_forced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write(tmp_path / "package.json", "{}")
+    (tmp_path / "node_modules").mkdir()
+    make_old(tmp_path / "package.json")
+    monkeypatch.setattr("devsweep.scanner.repository_status", lambda _project: "unknown")
+
+    result = scan(tmp_path, older_than=1, force=True)
+
+    assert result.items == []
+    assert any("could not be verified" in item.reason for item in result.skipped)
+
+
+def test_git_status_disables_optional_locks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from devsweep.git import repository_status
+
+    (tmp_path / ".git").mkdir()
+    calls: list[list[str]] = []
+
+    def run(args, **_kwargs):
+        calls.append(args)
+        return SimpleNamespace(returncode=0, stdout="")
+
+    monkeypatch.setattr("devsweep.git.subprocess.run", run)
+    assert repository_status(tmp_path) == "clean"
+    assert calls[0][1] == "--no-optional-locks"
+
+
 def test_size_and_type_filters(tmp_path: Path) -> None:
     write(tmp_path / "package.json", "{}")
     target = tmp_path / "node_modules"
@@ -182,6 +223,19 @@ def test_dirty_git_project_is_skipped_unless_forced(tmp_path: Path) -> None:
     assert len(forced.items) == 1
 
 
+def test_nested_scan_uses_enclosing_git_repository_status(tmp_path: Path) -> None:
+    subprocess.run(["git", "init", "-q", os.fspath(tmp_path)], check=True)
+    nested = tmp_path / "workspace"
+    write(nested / "package.json", "{}")
+    (nested / "node_modules").mkdir()
+    make_old(nested / "package.json")
+
+    result = scan(nested, older_than=1)
+
+    assert result.items == []
+    assert any("uncommitted" in item.reason for item in result.skipped)
+
+
 def test_empty_unicode_and_space_named_targets_and_sorting(tmp_path: Path) -> None:
     first = tmp_path / "space project"
     first.mkdir()
@@ -224,6 +278,26 @@ def test_nested_python_cache_uses_project_marker_ancestor(tmp_path: Path) -> Non
     assert items[0].project == tmp_path
 
 
+def test_sibling_python_activity_does_not_change_cache_project_or_age(tmp_path: Path) -> None:
+    stale_project = tmp_path / "stale-project"
+    write(stale_project / "pyproject.toml", "[project]\nname='stale'")
+    cache = stale_project / "src" / "module" / "__pycache__"
+    cache.mkdir(parents=True)
+    make_old(stale_project / "pyproject.toml", days=90)
+    write(cache / "module.pyc", "bytecode")
+    make_old(cache / "module.pyc", days=90)
+
+    active_project = tmp_path / "active-project"
+    write(active_project / "pyproject.toml", "[project]\nname='active'")
+    write(active_project / "recent.py", "print('active')")
+
+    items = scanned(tmp_path, older_than=30 * 86400, force=True)
+
+    assert len(items) == 1
+    assert items[0].path == cache
+    assert items[0].project == stale_project
+
+
 def test_missing_or_file_root_is_reported_without_crashing(tmp_path: Path) -> None:
     missing = scan(tmp_path / "missing")
     assert missing.items == []
@@ -257,9 +331,17 @@ def test_scanner_helpers_cover_git_activity_progress_and_missing_paths(tmp_path:
     (tmp_path / "node_modules").mkdir()
     make_old(tmp_path / "package.json")
     counts: list[int] = []
-    result = scan(tmp_path, older_than=0, progress=counts.append, types=("not-a-type",))
+    totals: list[int] = []
+    result = scan(
+        tmp_path,
+        older_than=0,
+        progress=counts.append,
+        progress_start=totals.append,
+        types=("not-a-type",),
+    )
     assert result.items == []
     assert counts == [1]
+    assert totals == [1]
 
 
 def test_scan_root_symlink_and_scandir_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

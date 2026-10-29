@@ -8,12 +8,46 @@ from pathlib import Path
 
 import pytest
 
-from devsweep.cli import main
+from devsweep.cli import _effective, build_parser, main
 
 
 def old(path: Path) -> None:
     stamp = time.time() - 86400 * 60
     os.utime(path, (stamp, stamp))
+
+
+def test_config_values_apply_when_cli_options_are_omitted(tmp_path: Path) -> None:
+    args = build_parser().parse_args(["scan", os.fspath(tmp_path)])
+
+    settings = _effective(
+        args,
+        {
+            "older_than": "7d",
+            "min_size": "1KB",
+            "sort": "path",
+            "force": True,
+            "types": ["node_modules"],
+            "exclude": ["vendor/**"],
+        },
+    )
+
+    assert settings["older_than"] == 7 * 86400
+    assert settings["min_size"] == 1024
+    assert settings["sort"] == "path"
+    assert settings["force"] is True
+    assert settings["types"] == ("node_modules",)
+    assert settings["excludes"] == ("vendor/**",)
+
+
+def test_explicit_cli_options_override_config(tmp_path: Path) -> None:
+    args = build_parser().parse_args(
+        ["scan", os.fspath(tmp_path), "--older-than", "2d", "--sort", "age"]
+    )
+
+    settings = _effective(args, {"older_than": "7d", "sort": "path"})
+
+    assert settings["older_than"] == 2 * 86400
+    assert settings["sort"] == "age"
 
 
 @pytest.fixture
@@ -61,6 +95,8 @@ def test_json_progress_diagnostics_stay_on_stderr(project: Path, monkeypatch: py
     output = capsys.readouterr().out
     assert json.loads(output)["items"]
     assert "Scanning" in diagnostics.getvalue()
+    assert "1/1 targets" in diagnostics.getvalue()
+    assert "[" in diagnostics.getvalue() and "]" in diagnostics.getvalue()
 
 
 def test_cli_handles_invalid_size_and_missing_root(project: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -68,3 +104,16 @@ def test_cli_handles_invalid_size_and_missing_root(project: Path, capsys: pytest
     assert "Error:" in capsys.readouterr().err
     assert main(["scan", os.fspath(project / "missing")]) == 2
     assert main(["clean", os.fspath(project / "missing")]) == 2
+
+
+def test_update_command_reports_successful_package_manager(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("devsweep.cli.load_config", lambda: {})
+    monkeypatch.setattr("devsweep.cli.update", lambda: "uv")
+
+    assert main(["update"]) == 0
+
+    output = capsys.readouterr().out
+    assert "Updating DevSweep" in output
+    assert "using uv" in output

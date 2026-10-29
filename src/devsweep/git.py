@@ -15,18 +15,34 @@ def git_available() -> bool:
 
 
 def repository_status(project: Path) -> str:
-    """Return ``clean``, ``dirty``, ``unknown`` or ``unavailable``."""
+    """Return ``clean``, ``dirty``, ``unknown``, ``unavailable`` or ``not-repository``."""
 
-    git_dir = project / ".git"
-    if is_symlink_or_reparse(git_dir):
-        return "unknown"
-    if not git_dir.exists():
-        return "unknown"
+    has_repository_metadata = False
+    for directory in (project, *project.parents):
+        git_dir = directory / ".git"
+        try:
+            if is_symlink_or_reparse(git_dir):
+                return "unknown"
+            if git_dir.exists():
+                has_repository_metadata = True
+                break
+        except OSError:
+            return "unknown"
+    if not has_repository_metadata:
+        return "not-repository"
     if not git_available():
         return "unknown"
     try:
         result = subprocess.run(
-            ["git", "-C", os.fspath(project), "status", "--porcelain", "--untracked-files=all"],
+            [
+                "git",
+                "--no-optional-locks",
+                "-C",
+                os.fspath(project),
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+            ],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,

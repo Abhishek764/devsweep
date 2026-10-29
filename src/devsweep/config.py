@@ -17,9 +17,11 @@ def config_path(env: dict[str, str] | None = None, platform: str | None = None) 
     values = os.environ if env is None else env
     system = sys.platform if platform is None else platform
     if system == "win32":
-        base = Path(values.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+        base_value = values.get("APPDATA")
+        base = Path(base_value) if base_value else Path.home() / "AppData" / "Roaming"
     else:
-        base = Path(values.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+        base_value = values.get("XDG_CONFIG_HOME")
+        base = Path(base_value) if base_value else Path.home() / ".config"
     return base / "devsweep" / "config.toml"
 
 

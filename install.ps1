@@ -17,6 +17,9 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+$env:PIP_PROGRESS_BAR = "on"
+Write-Output "Downloading and installing DevSweep; the installer will show transfer progress when available."
+
 if (Get-Command pipx -ErrorAction SilentlyContinue) {
     & pipx install $Repository
 } elseif (Get-Command uv -ErrorAction SilentlyContinue) {
@@ -35,3 +38,4 @@ if (-not ($pathEntries -contains $userScripts)) {
     Write-Warning "Your Python user Scripts directory may not be on PATH. Restart PowerShell or add it manually."
 }
 Write-Output "Installed devsweep. Try: devsweep scan ."
+Write-Output "To update later: devsweep update"

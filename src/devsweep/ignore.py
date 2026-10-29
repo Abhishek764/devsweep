@@ -57,6 +57,8 @@ def _matches_one(relative: str, pattern: str) -> bool:
         prefix = pattern[:-3].rstrip("/")
         if relative == prefix or relative.startswith(prefix + "/"):
             return True
+    if pattern.startswith("**/") and fnmatch.fnmatchcase(relative, pattern[3:]):
+        return True
     if "/" not in pattern:
         parts = relative.split("/")
         if any(fnmatch.fnmatchcase(part, pattern) for part in parts):

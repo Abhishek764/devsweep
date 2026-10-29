@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 from conftest import try_create_symlink
 
-from devsweep.cleaner import CleanSafetyError, _read_only_retry, clean, parse_selection
+from devsweep.cleaner import CleanSafetyError, clean, parse_selection
+from devsweep.platform_utils import _read_only_retry_onerror
 from devsweep.scanner import Target, scan
 
 
@@ -107,7 +108,7 @@ def test_clean_handles_invalid_roots_and_delete_failures(tmp_path: Path, monkeyp
     item = scan(tmp_path, older_than=1).items[0]
     with pytest.raises(CleanSafetyError):
         clean(tmp_path / "missing", [item])
-    monkeypatch.setattr("devsweep.cleaner.shutil.rmtree", lambda *args, **kwargs: (_ for _ in ()).throw(PermissionError("locked")))
+    monkeypatch.setattr("devsweep.cleaner.safe_rmtree", lambda *args, **kwargs: (_ for _ in ()).throw(PermissionError("locked")))
     result = clean(tmp_path, [item], yes=True)
     assert result.failures[0].reason == "in use, skipped"
     assert target.exists()
@@ -145,4 +146,4 @@ def test_clean_rejects_target_authorized_by_external_project_marker(tmp_path: Pa
 
 def test_read_only_retry_is_conservative_on_linux() -> None:
     with pytest.raises(OSError):
-        _read_only_retry(lambda _: None, "missing", (None, OSError("no"), None))
+        _read_only_retry_onerror(lambda _: None, "missing", (None, OSError("no"), None))
