@@ -1,5 +1,11 @@
 # Engineering changelog
 
+## 2026-10-30 - Make Windows self-update reliable
+
+- **Problem:** A running uv-managed `devsweep.exe` cannot replace its own tool environment because Windows locks the active `Scripts` directory. The old updater then fell back to an environment without pip.
+- **Changes:** uv updates launched from a uv-managed Windows installation are deferred to a detached retry that runs after DevSweep exits; the command reports the scheduled state clearly.
+- **Regression coverage:** Added an updater test proving the uv process is not run synchronously when deferral is selected.
+
 ## 2026-10-30 - Add an in-place update command
 
 - **Request:** Installed users had no documented way to fetch newer DevSweep releases.
