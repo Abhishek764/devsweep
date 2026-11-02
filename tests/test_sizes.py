@@ -7,7 +7,16 @@ import pytest
 from conftest import try_create_symlink
 
 from devsweep.platform_utils import error_text
-from devsweep.sizes import directory_size, human_size, parse_size, path_size
+from devsweep.sizes import allocated_size, directory_size, human_size, parse_size, path_size
+
+
+def _try_create_hardlink(link: Path, target: Path) -> bool:
+    """Create a hard link, returning False when the platform/filesystem does not support it."""
+    try:
+        os.link(target, link)
+    except (NotImplementedError, OSError):
+        return False
+    return True
 
 
 def test_directory_size_skips_symlinks(tmp_path: Path) -> None:
@@ -88,3 +97,46 @@ def test_directory_size_handles_entry_stat_error(tmp_path: Path, monkeypatch: py
     errors: list[tuple[Path, str]] = []
     assert directory_size(tmp_path, lambda path, reason: errors.append((path, reason))) == 0
     assert errors
+
+
+def test_directory_size_counts_hard_linked_inode_once(tmp_path: Path) -> None:
+    """Hard-linked files sharing an inode are counted only once."""
+    if not hasattr(os, "link"):
+        pytest.skip("os.link is unavailable on this platform")
+    folder = tmp_path / "folder"
+    folder.mkdir()
+    target = folder / "target.txt"
+    target.write_bytes(b"x" * 1024)
+    link = folder / "link.txt"
+    if not _try_create_hardlink(link, target):
+        pytest.skip("hard-link creation is unavailable for this user or filesystem")
+    errors: list[tuple[Path, str]] = []
+    # Same inode referenced by two directory entries: size counted once, not twice.
+    assert directory_size(folder, lambda path, reason: errors.append((path, reason))) == 1024
+
+
+def test_directory_size_counts_independent_files_separately(tmp_path: Path) -> None:
+    """Non-hard-linked files are each counted individually."""
+    folder = tmp_path / "folder"
+    folder.mkdir()
+    (folder / "a.txt").write_bytes(b"a" * 512)
+    (folder / "b.txt").write_bytes(b"b" * 512)
+    errors: list[tuple[Path, str]] = []
+    assert directory_size(folder, lambda path, reason: errors.append((path, reason))) == 1024
+
+
+def test_allocated_size_returns_none_when_st_blocks_unavailable(tmp_path: Path) -> None:
+    """allocated_size() returns None on platforms without st_blocks (e.g. Windows)."""
+    path = tmp_path / "file"
+    path.write_bytes(b"x" * 1024)
+    if hasattr(os.stat(path), "st_blocks"):
+        result = allocated_size(path)
+        assert result is not None
+        assert result >= 0
+    else:
+        assert allocated_size(path) is None
+
+
+def test_allocated_size_none_for_missing_path(tmp_path: Path) -> None:
+    """allocated_size() returns None for a path that does not exist."""
+    assert allocated_size(tmp_path / "missing") is None

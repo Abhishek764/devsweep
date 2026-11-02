@@ -9,10 +9,22 @@ from typing import Callable
 from .platform_utils import error_text, is_symlink_or_reparse, to_extended_path, to_public_path
 
 
-def directory_size(path: Path, on_error: Callable[[Path, str], None] | None = None) -> int:
-    """Return bytes below *path*, ignoring symlinks and recording bad entries."""
+def directory_size(
+    path: Path,
+    on_error: Callable[[Path, str], None] | None = None,
+    *,
+    dedup_inodes: bool = True,
+) -> int:
+    """Return bytes below *path*, ignoring symlinks and recording bad entries.
+
+    When *dedup_inodes* is true (default), each unique inode identified by
+    ``(st_dev, st_ino)`` is counted only once, so hard-linked files are not
+    double-counted.  On platforms where ``st_dev``/``st_ino`` are unavailable,
+    every entry is counted as before.
+    """
 
     total = 0
+    seen_inodes: set[tuple[int, int]] = set()
     stack = [path]
     while stack:
         current = stack.pop()
@@ -28,7 +40,34 @@ def directory_size(path: Path, on_error: Callable[[Path, str], None] | None = No
                         if entry.is_dir(follow_symlinks=False):
                             stack.append(child)
                         elif entry.is_file(follow_symlinks=False):
-                            total += entry.stat(follow_symlinks=False).st_size
+                            try:
+                                st = os.stat(child, follow_symlinks=False)
+                            except OSError as exc:
+                                if on_error:
+                                    on_error(child, error_text(exc))
+                                continue
+                            if dedup_inodes:
+                                try:
+                                    inode_key = (st.st_dev, st.st_ino)
+                                except AttributeError:
+                                    # st_dev/st_ino unavailable; count every entry.
+                                    total += st.st_size
+                                    continue
+                                try:
+                                    nlink = st.st_nlink
+                                except AttributeError:
+                                    # st_nlink unavailable; cannot confirm hard links, count every entry.
+                                    total += st.st_size
+                                    continue
+                                if nlink <= 1:
+                                    # Regular file with a single directory entry: always count,
+                                    # even if its inode happens to collide with another file's.
+                                    total += st.st_size
+                                    continue
+                                if inode_key in seen_inodes:
+                                    continue
+                                seen_inodes.add(inode_key)
+                            total += st.st_size
                     except OSError as exc:
                         if on_error:
                             on_error(child, error_text(exc))
@@ -38,17 +77,45 @@ def directory_size(path: Path, on_error: Callable[[Path, str], None] | None = No
     return total
 
 
-def path_size(path: Path, on_error: Callable[[Path, str], None] | None = None) -> int:
+def path_size(
+    path: Path,
+    on_error: Callable[[Path, str], None] | None = None,
+    *,
+    dedup_inodes: bool = True,
+) -> int:
     try:
         if is_symlink_or_reparse(path):
             return 0
         if path.is_file():
             return path.stat().st_size
-        return directory_size(path, on_error=on_error)
+        return directory_size(path, on_error=on_error, dedup_inodes=dedup_inodes)
     except OSError as exc:
         if on_error:
             on_error(path, error_text(exc))
         return 0
+
+
+def allocated_size(path: Path) -> int | None:
+    """Return allocated disk bytes for *path*, or ``None`` when unavailable.
+
+    Uses ``st_blocks * st_blksize`` when the platform supports it (POSIX).
+    Returns ``None`` on platforms without ``st_blocks`` (e.g. Windows) or when
+    the path cannot be stat'd.
+    """
+
+    try:
+        st = os.stat(path, follow_symlinks=False)
+    except OSError:
+        return None
+    try:
+        blocks = st.st_blocks
+        blksize = st.st_blksize
+    except AttributeError:
+        # st_blocks/st_blksize unavailable (e.g. Windows).
+        return None
+    if blocks is None or blksize is None:
+        return None
+    return int(blocks) * int(blksize)
 
 
 def human_size(value: int) -> str:
